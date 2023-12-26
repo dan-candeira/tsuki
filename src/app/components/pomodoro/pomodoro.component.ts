@@ -1,11 +1,23 @@
+import { AsyncPipe } from '@angular/common';
 import { Component, OnInit, WritableSignal, signal } from '@angular/core';
+import {
+	BehaviorSubject,
+	Observable,
+	Subject,
+	scan,
+	switchMap,
+	takeUntil,
+	takeWhile,
+	timer,
+} from 'rxjs';
+import { TimePipe } from '../../pipes/time.pipe';
 
 @Component({
 	selector: 'app-pomodoro',
 	standalone: true,
-	imports: [],
+	imports: [AsyncPipe, TimePipe],
 	template: `
-		<svg
+		<!-- <svg
 			viewBox="0 0 117 111"
 			xmlns="http://www.w3.org/2000/svg"
 			xml:space="preserve"
@@ -69,7 +81,7 @@ import { Component, OnInit, WritableSignal, signal } from '@angular/core';
 				x="61"
 			>
 				<g>
-					@for (time of timer(); track $index) { @if (time !== 1)
+					@for (tick of ticks(); track $index) { @if (tick !== 1)
 					{
 					<path
 						[attr.d]="'m' + ($index + 1) * 6 + ' 79.997 v3 10'"
@@ -81,7 +93,7 @@ import { Component, OnInit, WritableSignal, signal } from '@angular/core';
 						y="99.997"
 						style="font-size: 8px; fill: #fafcfd"
 					>
-						{{ time }}
+						{{ tick }}
 					</text>
 					} @else {
 					<path
@@ -104,29 +116,37 @@ import { Component, OnInit, WritableSignal, signal } from '@angular/core';
 				d="M17.557 36.968c-2.789-.402-13.61 12.229-9.001 14.453 4.348 2.097 3.178-5.473 8.387-8.051 5.209-2.578 5.57-5.687.614-6.402Z"
 				style="fill:#ff8b81"
 			/>
-		</svg>
-		<div>
-			@for (option of timerOptions; track $index) {
-			<button (click)="selectTimerOption(option)">
-				<span class="vh">{{ option }} minutes</span>
-				<span aria-hidden="true">{{ option }}min</span>
-			</button>
-			}
-		</div>
+		</svg> -->
+		<section>
+			<div>
+				@for (option of timerOptions; track $index) {
+				<button (click)="selectTimerOption(option)">
+					<span class="vh">{{ option }} minutes</span>
+					<span aria-hidden="true">{{ option }}min</span>
+				</button>
+				}
+			</div>
+			<div>
+				{{ timer$ | async | time }}
+			</div>
+			<button (click)="startTimer()">start</button>
+		</section>
 	`,
 	styleUrl: './pomodoro.component.css',
 })
 export class PomodoroComponent implements OnInit {
-	timerOptions = [15, 25, 45];
-	timer: WritableSignal<number[]> = signal([]);
+	timerOptions = [3, 15, 25, 45];
+	ticks: WritableSignal<number[]> = signal([]);
+	timer$!: Observable<any>;
+	toggle$: Subject<boolean> = new Subject();
 
 	ngOnInit(): void {
 		this.selectTimerOption(this.timerOptions[0]);
 	}
 
-	selectTimerOption(timer: number): void {
+	selectTimerOption(tickAmount: number): void {
 		const chunks = Array.from(
-			{ length: timer },
+			{ length: tickAmount },
 			(_: null, index: number) => {
 				index += 1;
 				if (index === 1) {
@@ -138,6 +158,23 @@ export class PomodoroComponent implements OnInit {
 				return 1;
 			}
 		);
-		this.timer.set(chunks);
+		this.ticks.set(chunks);
+
+		const _timer = timer(0, 1000).pipe(
+			scan((acc) => --acc, 60 * tickAmount),
+			takeWhile((v) => v >= tickAmount)
+		);
+
+		this.timer$ = this.toggle$.pipe(
+			switchMap((v) => _timer)
+		);
+	}
+
+	startTimer(): void {
+		this.toggle$.next(true);
+	}
+
+	stopTimer(): void {
+		this.toggle$.next(false);
 	}
 }
